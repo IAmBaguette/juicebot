@@ -51,6 +51,21 @@ myBot.on("serverDeleted", function (server) {
     }
 });
 
+myBot.on("serverMemberRemoved", function (server, user) {
+    var db_server = servers.filter(function (value) {
+        return value.id == server.id;
+    });
+
+    if (db_server.length > 0) {
+        var db_user = db_server.mods.filter(function (value) {
+            return value.id == user.id;
+        });
+        var index = db_server.mods.indexOf(db_user);
+        db_servers.splice(index, 1);
+        writeToJSON("./servers.json", servers);
+    }
+});
+
 // Emitted when the client runs into a big problem, supplies an error object.
 myBot.on("error", function (error) {
     console.log(error + " < error");
