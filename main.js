@@ -5,10 +5,10 @@ var Discord = require("discord.js");
 
 var myBot = new Discord.Client({ autoReconnection: true });
 
-var cmds = require("./cmds.json");
-var servers = require("./servers.json");
-var package = require("./package.json");
-var config = require("./config.json");
+var cmds = require(__dirname + "/cmds.json");
+var servers = require(__dirname + "/servers.json");
+var package = require(__dirname + "/package.json");
+var config = require(__dirname + "/config.json");
 
 var yt_header = "http://www.youtube.com/watch?v="
 
@@ -35,7 +35,7 @@ myBot.on("serverCreated", function (server) {
         console.log("server already exists");
     } else {
         servers.push({ "id": server.id, "mods": [], "volume": 50 });
-        writeToJSON("./servers.json", servers);
+        writeToJSON(__dirname + "/servers.json", servers);
     }
 });
 
@@ -47,7 +47,7 @@ myBot.on("serverDeleted", function (server) {
     if (db_server.length > 0) {
         var index = servers.indexOf(db_server);
         servers.splice(index, 1);
-        writeToJSON("./servers.json", servers);
+        writeToJSON(__dirname + "/servers.json", servers);
     }
 });
 
@@ -62,7 +62,7 @@ myBot.on("serverMemberRemoved", function (server, user) {
         });
         var index = db_server.mods.indexOf(db_user);
         db_servers.splice(index, 1);
-        writeToJSON("./servers.json", servers);
+        writeToJSON(__dirname + "/servers.json", servers);
     }
 });
 
@@ -210,7 +210,7 @@ function play(user, channel, id) {
         } else {
             myBot.sendMessage(channel, "Loading: `" + info.title + "`");
             ytdl(yt_header + id, { filter: "audioonly" })
-                .pipe(fs.createWriteStream("./playback.mp3"))
+                .pipe(fs.createWriteStream(__dirname + "/playback.mp3"))
                 .on("finish", function () {
                     myBot.joinVoiceChannel(user.voiceChannel, function (error, voiceConnection) {
                         if (error) {
@@ -223,7 +223,7 @@ function play(user, channel, id) {
                             voiceConnection.stopPlaying();
                             var server = getServerFromDB(channel.server);
                             voiceConnection.setVolume(server.volume / 100);
-                            voiceConnection.playFile("./playback.mp3", {}, function (error, indent) {
+                            voiceConnection.playFile(__dirname + "/playback.mp3", {}, function (error, indent) {
                                 if (error) {
                                     console.log(error, error.message, error.name);
                                     throw error;
@@ -265,7 +265,7 @@ function volume(user, message, amount) {
     if (!isNaN(value)) {
         value = clamp(value, 0, 100);
         server.volume = value;
-        writeToJSON("./servers.json", servers);
+        writeToJSON(__dirname + "/servers.json", servers);
         myBot.sendMessage(message.channel, "Volume set at: `" + value + "`%");
     } else {
         myBot.reply(messag, "Value entered is invalid");
@@ -306,7 +306,7 @@ function mod(user, channel, id) {
                 // add a new mod
                 server.mods.push({ "id": targetUser.id });
                 // save changes
-                writeToJSON("./servers.json", servers);
+                writeToJSON(__dirname + "/servers.json", servers);
             }
         } else {
             console.log("user doesn't exist");
@@ -328,7 +328,7 @@ function unmod(user, channel, id) {
                 var index = server.mods.indexOf(mods[0]);
                 server.mods.splice(index, 1);
                 // save changes
-                writeToJSON("./servers.json", servers);
+                writeToJSON(__dirname + "/servers.json", servers);
             } else {
                 console.log("mod doesn't exist");
             }
