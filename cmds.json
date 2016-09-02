@@ -20,6 +20,10 @@
         "description": "add a description"
     },
     {
+        "name": "queue",
+        "description": "add a description"
+    },
+    {
         "name": "me",
         "description": "Provides information about you.\n\nME"
     },

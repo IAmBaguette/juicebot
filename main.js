@@ -12,6 +12,8 @@ var config = require(__dirname + "/config.json");
 
 var yt_header = "http://www.youtube.com/watch?v="
 
+var queues = {};
+
 // Emitted when the client is ready to use
 myBot.on("ready", function () {
     //var server 
@@ -107,9 +109,9 @@ function filterCommand(message) {
                         if (msg.startsWith(cmd.name + " ")) {
                             if (isUserOwnerOrMod(author, channel)) {
                                 play(author, message.channel, args.substring(1, args.length));
-                                break;
                             }
                         }
+                        break;
                     case "stop":
                         if (isUserOwnerOrMod(author, channel)) {
                             stop(author, message.channel);
@@ -140,6 +142,11 @@ function filterCommand(message) {
                             unmod(author, message.channel, args.substring(1, args.length));
                         }
                         break;
+                    case "queue":
+                        if (msg.startsWith(cmd.name + " ")) {
+                            queue(author, message.channel, args.substring(1, args.length));
+                        }
+                        break;
                     default:
                         break;
                 }
@@ -157,6 +164,7 @@ function help(message, name) {
                 case "volume":
                 case "mod":
                 case "unmod":
+                case "queue":
                     if (!isUserOwnerOrMod(message.author, message.channel)) {
                         return;
                     }
@@ -212,6 +220,10 @@ function play(user, channel, id) {
             ytdl(yt_header + id, { filter: "audioonly" })
                 .pipe(fs.createWriteStream(__dirname + "/playback.mp3"))
                 .on("finish", function () {
+                    if (!user.voiceChannel) {
+                        console.log("not suppose to happen");
+                    }
+
                     myBot.joinVoiceChannel(user.voiceChannel, function (error, voiceConnection) {
                         if (error) {
                             console.log(error, error.message, error.name);
@@ -232,11 +244,44 @@ function play(user, channel, id) {
                                     myBot.sendMessage(channel, "Playing: `" + info.title + "`");
                                     // on song end
                                     indent.on("end", function () {
-                                        myBot.leaveVoiceChannel(user.voiceChannel, function (error) {
-                                            if (error) {
-                                                throw error;
+                                        // check that the server has any queued lists
+                                        if (queues[channel.server.id]) {
+                                            // make sure there's a next song
+                                            if (queues[channel.server.id].length > 0) {
+                                                // get newxt song
+                                                var newid = queues[channel.server.id][0];
+                                                queues[channel.server.id].splice(0, 1);
+
+                                                // remove queue if there's no more songs
+                                                if (queues[channel.server.id].length <= 0) {
+                                                    delete queues[channel.server.id];
+                                                }
+                                                // play next queued song
+                                                play(user, channel, newid)
+                                            } else {
+                                                // leave if there's no songs (shouldn't happen)
+                                                myBot.leaveVoiceChannel(user.voiceChannel, function (error) {
+                                                    // remove queue
+                                                    if (queues[channel.server.id]) {
+                                                        delete queues[channel.server.id];
+                                                    }
+                                                    if (error) {
+                                                        throw error;
+                                                    }
+                                                });
                                             }
-                                        });
+                                        } else {
+                                            // leave if there's no song
+                                            myBot.leaveVoiceChannel(user.voiceChannel, function (error) {
+                                                // remove queue
+                                                if (queues[channel.server.id]) {
+                                                    delete queues[channel.server.id];
+                                                }
+                                                if (error) {
+                                                    throw error;
+                                                }
+                                            });
+                                        }
                                     });
                                 }
                             });
@@ -338,6 +383,33 @@ function unmod(user, channel, id) {
     }
 }
 
+function queue(user, channel, id) {
+    // only queue songs if there's a voice connection that exists
+    if (!getVoiceConnection(user)) return;
+
+    // create queue for the server
+    if (!queues.hasOwnProperty(channel.server.id)) {
+        queues[channel.server.id] = [];
+    }
+
+    // push id to queue
+    queues[channel.server.id].push(id);
+    ytdl.getInfo(yt_header + id, {}, function (error, info) {
+        if (error) {
+            if (error.message.includes("404")) {
+                console.log("video doesn't exist?");
+            } else if (error.message.includes("303")) {
+                console.log("video id too long?");
+            } else {
+                console.log(error, error.message, error.name);
+                throw error;
+            }
+        } else {
+            myBot.sendMessage(channel, "Queued: `" + info.title + "`");
+        }
+    });
+}
+
 function isUserOwnerOrMod(user, channel) {
     return isUserServerOwner(user, channel) || isUserMod(user, channel);
 }
@@ -381,7 +453,7 @@ function getServerFromDB(server) {
 // get voice connection of the users voice channel
 function getVoiceConnection(user) {
     var results = myBot.voiceConnections.filter(function (voiceConnection) {
-        return user.voiceChannel == voiceConnection.voiceChannel;
+        return user.voiceChannel.id == voiceConnection.voiceChannel.id;
     });
 
     if (results.length > 0) {
