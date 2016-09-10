@@ -1,0 +1,46 @@
+{
+    "help": {
+        "description": "Provides help information for JuiceBot commands.\n\nHELP [command]\n\tcommand - displays help information on that command.",
+        "accesslevel": 0
+    },
+    "info": {
+        "description": "Provides information about Juicebot.\n\nINFO",
+        "accesslevel": 0
+    },
+    "play": {
+        "description": "add a description",
+        "accesslevel": 0
+    },
+    "stop": {
+        "description": "add a description",
+        "accesslevel": 1
+    },
+    "volume": {
+        "description": "add a description",
+        "accesslevel": 1
+    },
+    "queue": {
+        "description": "add a description",
+        "accesslevel": 1
+    },
+    "clear": {
+        "description": "add a description",
+        "accesslevel": 1
+    },
+    "me": {
+        "description": "Provides information about you.\n\nME",
+        "accesslevel": 0
+    },
+    "mods": {
+        "description": "Provides information about the moderators in this server.\n\nMODS",
+        "accesslevel": 1
+    },
+    "mod": {
+        "description": "add a description",
+        "accesslevel": 2
+    },
+    "unmod": {
+        "description": "add a description",
+        "accesslevel": 2
+    }
+}

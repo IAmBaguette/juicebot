@@ -1,14 +1,14 @@
 {
   "name": "juicebot",
-  "version": "0.11.1",
+  "version": "0.12.0",
   "main": "main.js",
   "author": {
     "name": "IAmBaguette"
   },
   "license": "MIT",
   "dependencies": {
-    "discord.js": "^7.0.1",
-    "fs": "0.0.2",
-    "ytdl-core": "^0.7.14"
+    "discord.js": "^9.1.0",
+    "node-opus": "^0.2.1",
+    "ytdl-core": "^0.7.17"
   }
 }

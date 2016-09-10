@@ -1,474 +1,302 @@
+"use strict";
 
-var fs = require("fs");
-var ytdl = require("ytdl-core");
-var Discord = require("discord.js");
+const fs = require('fs');
+const ytdl = require('ytdl-core');
+const Discord = require('discord.js');
+const client = new Discord.Client();
 
-var myBot = new Discord.Client({ autoReconnection: true });
+const config = require(__dirname + '/config.json');
+const commands = require(__dirname + '/commands.json');
+const servers = require(__dirname + '/servers.json');
+const handlers = {
+    'help': help,
+    'info': info,
+    'play': play,
+    'stop': stop,
+    'volume': volume,
+    'queue': queue,
+    'clear': clear,
+    'me': me,
+    'mods': mods,
+    'mod': mod,
+    'unmod': unmod
+};
+const queues = {};
+const yt_prefix = "http://www.youtube.com/watch?v=";
+const prefix = '!';
 
-var cmds = require(__dirname + "/cmds.json");
-var servers = require(__dirname + "/servers.json");
-var package = require(__dirname + "/package.json");
-var config = require(__dirname + "/config.json");
+client.on('ready', () => {
 
-var yt_header = "http://www.youtube.com/watch?v="
-
-var queues = {};
-
-// Emitted when the client is ready to use
-myBot.on("ready", function () {
-    //var server 
-    // mybot.servers.forEach(function (value) {
-    //     if (value.id )
-    //     servers.push({ "id": value.id, "stopPlaying": false, "volume": 0.5, "loop": false });
-    // });
 });
 
-// Emitted when the client receives a message, supplies a Message object.
-myBot.on("message", function (message) {
-    filterCommand(message);
+client.on('message', (message) => {
+    filter(message);
 });
 
-myBot.on("serverCreated", function (server) {
-    var db_server = servers.filter(function (value) {
-        return value.id == server.id;
-    });
-
-    if (db_server.length > 0) {
+client.on('guildCreate', (guild) => {
+    const server = servers[guild.id];
+    if (server === undefined) {
+        servers[guild.id] = {
+            "mods": {},
+            "volume": 50
+        };
+        // save
+        fs.writeFileSync(__dirname + '/servers.json', JSON.stringify(servers, null, 4));
+    } else {
         console.log("server already exists");
-    } else {
-        servers.push({ "id": server.id, "mods": [], "volume": 50 });
-        writeToJSON(__dirname + "/servers.json", servers);
     }
 });
 
-myBot.on("serverDeleted", function (server) {
-    var db_server = servers.filter(function (value) {
-        return value.id == server.id;
-    });
+client.on('guildDelete', (guild) => {
+    const server = servers[guild.id];
 
-    if (db_server.length > 0) {
-        var index = servers.indexOf(db_server);
-        servers.splice(index, 1);
-        writeToJSON(__dirname + "/servers.json", servers);
+    if (server) {
+        delete servers[guild.id];
+        // save
+        fs.writeFileSync(__dirname + '/servers.json', JSON.stringify(servers, null, 4));
     }
 });
 
-myBot.on("serverMemberRemoved", function (server, user) {
-    var db_server = servers.filter(function (value) {
-        return value.id == server.id;
-    });
+client.on('gulpMemberRemove', (guild, member) => {
+    const server = servers[guild.id];
 
-    if (db_server.length > 0) {
-        var db_user = db_server.mods.filter(function (value) {
-            return value.id == user.id;
-        });
-        var index = db_server.mods.indexOf(db_user);
-        db_servers.splice(index, 1);
-        writeToJSON(__dirname + "/servers.json", servers);
+    if (server) {
+        const mod = server.mods[member.id];
+        if (mod) {
+            delete server.mods[member.id];
+            // save
+            fs.writeFileSync(__dirname + '/servers.json', JSON.stringify(servers, null, 4));
+        }
     }
 });
 
-// Emitted when the client runs into a big problem, supplies an error object.
-myBot.on("error", function (error) {
-    console.log(error + " < error");
-    myBot.logout();
-});
-
-myBot.loginWithToken(config.token);
-
-
-function filterCommand(message) {
-    var author = message.author;
-    var channel = message.channel;
-    if (message.content[0] == "!") {
-        var msg = message.content.substring(1, message.content.length)
-        cmds.forEach(function (cmd) {
-            if (msg.startsWith(cmd.name)) {
-                var args = msg.replace(cmd.name, "");
-                switch (cmd.name) {
-                    case "help":
-                        if (msg.startsWith(cmd.name + " ")) {
-                            help(message, args.substring(1, args.length));
-                        } else {
-                            if (isUserOwnerOrMod(author, channel)) {
-                                myBot.reply(message, "\n" + modHelp());
-                            } else {
-                                myBot.reply(message, "\n" + userHelp());
-                            }
-                        }
-                        break;
-                    case "info":
-                        myBot.reply(
-                            message,
-                            "\n```" +
-                            "App: " + package.name + "\n" +
-                            "Version: " + package.version + "\n" +
-                            "Author: " + package.author.name + "```\n");
-                        break;
-                    case "play":
-                        if (msg.startsWith(cmd.name + " ")) {
-                            if (isUserOwnerOrMod(author, channel)) {
-                                play(author, message.channel, args.substring(1, args.length));
-                            }
-                        }
-                        break;
-                    case "stop":
-                        if (isUserOwnerOrMod(author, channel)) {
-                            stop(author, message.channel);
-                        }
-                        break;
-                    case "volume":
-                        if (msg.startsWith(cmd.name + " ")) {
-                            if (isUserOwnerOrMod(author, channel)) {
-                                volume(author, message, args.substring(1, args.length));
-                            }
-                        }
-                        break;
-                    case "me":
-                        myBot.reply(message, message.author.id);
-                        break;
-                    case "mods":
-                        mods(author, message.channel);
-                        break;
-                    case "mod":
-                        if (msg.startsWith(cmd.name + " ")) {
-                            // requires owner permission
-                            mod(author, message.channel, args.substring(1, args.length));
-                        }
-                        break;
-                    case "unmod":
-                        if (msg.startsWith(cmd.name + " ")) {
-                            // requires owner permission
-                            unmod(author, message.channel, args.substring(1, args.length));
-                        }
-                        break;
-                    case "queue":
-                        if (msg.startsWith(cmd.name + " ")) {
-                            queue(author, message.channel, args.substring(1, args.length));
-                        }
-                        break;
-                    default:
-                        break;
-                }
-            }
-        });
-    }
-}
-
-function help(message, name) {
-    cmds.forEach(function (cmd) {
-        if (name == cmd.name) {
-            switch (cmd.name) {
-                case "play":
-                case "stop":
-                case "volume":
-                case "mod":
-                case "unmod":
-                case "queue":
-                    if (!isUserOwnerOrMod(message.author, message.channel)) {
-                        return;
-                    }
-                    break;
-                default:
-                    break;
-            }
-            myBot.reply(message, "\n```" + cmd.description + "```");
-        }
-    });
-}
-
-function modHelp() {
-    var msg = "Commands: ";
-    cmds.forEach(function (cmd) {
-        msg += "`" + cmd.name + "`, ";
-    });
-    msg = msg.substring(0, msg.length - 2);
-    return msg;
-}
-
-function userHelp() {
-    var msg = "Commands: ";
-    cmds.forEach(function (cmd) {
-        switch (cmd.name) {
-            case "help":
-            case "info":
-            case "me":
-            case "mods":
-                msg += "`" + cmd.name + "`, ";
-                break;
-            default:
-                break;
-        }
-    });
-    msg = msg.substring(0, msg.length - 2);
-    return msg;
-}
-
-function play(user, channel, id) {
-    ytdl.getInfo(yt_header + id, {}, function (error, info) {
-        if (error) {
-            if (error.message.includes("404")) {
-                console.log("video doesn't exist?");
-            } else if (error.message.includes("303")) {
-                console.log("video id too long?");
-            } else {
-                console.log(error, error.message, error.name);
-                throw error;
-            }
-        } else {
-            myBot.sendMessage(channel, "Loading: `" + info.title + "`");
-            ytdl(yt_header + id, { filter: "audioonly" })
-                .pipe(fs.createWriteStream(__dirname + "/playback.mp3"))
-                .on("finish", function () {
-                    if (!user.voiceChannel) {
-                        console.log("not suppose to happen");
-                    }
-
-                    myBot.joinVoiceChannel(user.voiceChannel, function (error, voiceConnection) {
-                        if (error) {
-                            console.log(error, error.message, error.name);
-                            throw error;
-                        } else {
-                            if (voiceConnection.playingIntent) {
-                                voiceConnection.playingIntent.removeAllListeners("end");
-                            }
-                            voiceConnection.stopPlaying();
-                            var server = getServerFromDB(channel.server);
-                            voiceConnection.setVolume(server.volume / 100);
-                            voiceConnection.playFile(__dirname + "/playback.mp3", {}, function (error, indent) {
-                                if (error) {
-                                    console.log(error, error.message, error.name);
-                                    throw error;
-                                } else {
-                                    // send a message to the users that we've successfully playing a song
-                                    myBot.sendMessage(channel, "Playing: `" + info.title + "`");
-                                    // on song end
-                                    indent.on("end", function () {
-                                        // check that the server has any queued lists
-                                        if (queues[channel.server.id]) {
-                                            // make sure there's a next song
-                                            if (queues[channel.server.id].length > 0) {
-                                                // get newxt song
-                                                var newid = queues[channel.server.id][0];
-                                                queues[channel.server.id].splice(0, 1);
-
-                                                // remove queue if there's no more songs
-                                                if (queues[channel.server.id].length <= 0) {
-                                                    delete queues[channel.server.id];
-                                                }
-                                                // play next queued song
-                                                play(user, channel, newid)
-                                            } else {
-                                                // leave if there's no songs (shouldn't happen)
-                                                myBot.leaveVoiceChannel(user.voiceChannel, function (error) {
-                                                    // remove queue
-                                                    if (queues[channel.server.id]) {
-                                                        delete queues[channel.server.id];
-                                                    }
-                                                    if (error) {
-                                                        throw error;
-                                                    }
-                                                });
-                                            }
-                                        } else {
-                                            // leave if there's no song
-                                            myBot.leaveVoiceChannel(user.voiceChannel, function (error) {
-                                                // remove queue
-                                                if (queues[channel.server.id]) {
-                                                    delete queues[channel.server.id];
-                                                }
-                                                if (error) {
-                                                    throw error;
-                                                }
-                                            });
-                                        }
-                                    });
-                                }
-                            });
-                        }
-                    });
-                });
-        }
-    });
-}
-
-function stop(user, channel) {
-    if (user.voiceChannel) {
-        var voiceConnection = getVoiceConnection(user);
-        if (voiceConnection) {
-            // only stop the music bot if it is playing
-            if (voiceConnection.playing) {
-                voiceConnection.stopPlaying();
-            }
-        }
-    }
-}
-
-function volume(user, message, amount) {
-    var server = getServerFromDB(message.channel.server);
-    var value = Number(amount);
-    if (!isNaN(value)) {
-        value = clamp(value, 0, 100);
-        server.volume = value;
-        writeToJSON(__dirname + "/servers.json", servers);
-        myBot.sendMessage(message.channel, "Volume set at: `" + value + "`%");
-    } else {
-        myBot.reply(messag, "Value entered is invalid");
-        return;
-    }
-
-    var voiceConnection = getVoiceConnection(user);
-    if (voiceConnection) {
-        voiceConnection.setVolume(value / 100);
-    }
-}
-
-function mods(user, channel) {
-    var server = getServerFromDB(channel.server);
-    var msg = "There are no mods!";
-    if (server.mods.length > 0) {
-        msg = "List of mods: \n";
-        server.mods.forEach(function (value) {
-            var name = getUser(value.id, channel.server).username;
-            msg += "id: `" + value.id + "` name: `" + name + "`\n";
-        });
-    }
-    myBot.sendMessage(channel, msg);
-}
-
-function mod(user, channel, id) {
-    if (isUserServerOwner(user, channel)) {
-        var targetUser = getUser(id, channel.server);
-        if (targetUser) {
-            var server = getServerFromDB(channel.server);
-            var mods = server.mods.filter(function (value) {
-                return value.id == targetUser.id;
-            });
-            if (mods.length > 0) {
-                console.log("already exist");
-            } else {
-                myBot.sendMessage(channel, "Modding `" + targetUser.username + "`");
-                // add a new mod
-                server.mods.push({ "id": targetUser.id });
-                // save changes
-                writeToJSON(__dirname + "/servers.json", servers);
-            }
-        } else {
-            console.log("user doesn't exist");
-        }
-    }
-}
-
-function unmod(user, channel, id) {
-    if (isUserServerOwner(user, channel)) {
-        var targetUser = getUser(id, channel.server);
-        if (targetUser) {
-            var server = getServerFromDB(channel.server);
-            var mods = server.mods.filter(function (value) {
-                return value.id == targetUser.id;
-            });
-            if (mods.length > 0) {
-                myBot.sendMessage(channel, "Unmodding `" + targetUser.username + "`");
-                // remove mod
-                var index = server.mods.indexOf(mods[0]);
-                server.mods.splice(index, 1);
-                // save changes
-                writeToJSON(__dirname + "/servers.json", servers);
-            } else {
-                console.log("mod doesn't exist");
-            }
-        } else {
-            console.log("user doesn't exist");
-        }
-    }
-}
-
-function queue(user, channel, id) {
-    // only queue songs if there's a voice connection that exists
-    if (!getVoiceConnection(user)) return;
-
-    // create queue for the server
-    if (!queues.hasOwnProperty(channel.server.id)) {
-        queues[channel.server.id] = [];
-    }
-
-    // push id to queue
-    queues[channel.server.id].push(id);
-    ytdl.getInfo(yt_header + id, {}, function (error, info) {
-        if (error) {
-            if (error.message.includes("404")) {
-                console.log("video doesn't exist?");
-            } else if (error.message.includes("303")) {
-                console.log("video id too long?");
-            } else {
-                console.log(error, error.message, error.name);
-                throw error;
-            }
-        } else {
-            myBot.sendMessage(channel, "Queued: `" + info.title + "`");
-        }
-    });
-}
-
-function isUserOwnerOrMod(user, channel) {
-    return isUserServerOwner(user, channel) || isUserMod(user, channel);
-}
-
-function isUserServerOwner(user, channel) {
-    return user.id == channel.server.ownerID;
-}
-
-function isUserMod(user, channel) {
-    var server = getServerFromDB(channel.server);
-    var mods = server.mods.filter(function (value) {
-        return value.id == user.id;
-    });
-    if (mods.length > 0) {
-        return mods[0];
-    } else {
-        return undefined;
-    }
-}
-
-function getUser(id, server) {
-    var server = myBot.servers.filter(function (value) {
-        return value.id == server.id;
-    })[0];
-    var user = server.members.filter(function (value) {
-        return value.id == id;
-    });
-    if (user.length > 0) {
-        return user[0];
-    } else {
-        return undefined;
-    }
-}
-
-function getServerFromDB(server) {
-    return servers.filter(function (value) {
-        return value.id == server.id;
-    })[0];
-}
-
-// get voice connection of the users voice channel
-function getVoiceConnection(user) {
-    var results = myBot.voiceConnections.filter(function (voiceConnection) {
-        return user.voiceChannel.id == voiceConnection.voiceChannel.id;
-    });
-
-    if (results.length > 0) {
-        return results[0];
-    } else {
-        return undefined;
-    }
-}
+client.login(config.token);
 
 function clamp(num, min, max) {
     return Math.min(Math.max(num, min), max);
 };
 
-function writeToJSON(fileName, object) {
-    fs.writeFile(fileName, JSON.stringify(object, null, 4), function (err) {
-        if (err) { console.log(err); }
+function getAccessLevel(msg) {
+    if (msg.channel.guild.ownerID === msg.author.id) return 2;
+    const id = msg.channel.guild.id;
+    const server = servers[id];
+    if (server.mods[msg.author.id] !== undefined) return 1;
+    return 0;
+}
+
+function filter(msg) {
+    for (let key in commands) {
+        if (!commands.hasOwnProperty(key)) continue;
+        const args = msg.content.split(" ");
+        if (args[0] !== prefix + key) continue;
+        args.shift();
+        const accesslevel = getAccessLevel(msg);
+        if (accesslevel >= commands[key].accesslevel) {
+            handlers[key](msg, ...args);
+        }
+    }
+}
+
+function help(msg, name) {
+    const accesslevel = getAccessLevel(msg);
+    if (name) {
+        if (commands.hasOwnProperty(name)) {
+            if (accesslevel >= commands[name].accesslevel) {
+                msg.reply("\n```" + commands[name].description + "```");
+            }
+        } else {
+            msg.reply("command doesn't exist");
+        }
+    } else {
+        let s = "Commands: ";
+        for (let key in commands) {
+            if (!commands.hasOwnProperty(key)) continue;
+            if (accesslevel >= commands[key].accesslevel) {
+                s += "`" + key + "`, "
+            }
+        }
+        s = s.substr(0, s.length - 2);
+        msg.reply(s);
+    }
+}
+
+function info(msg) {
+    msg.reply(
+        "\n```" +
+        "App: JuiceBot\n" +
+        "Version: 0.12.0\n" +
+        "Author: IAmBaguette```\n");
+}
+
+function play(msg, yt_id) {
+    const id = msg.channel.guild.id;
+    const voiceChannelID = msg.member.voiceChannelID;
+    if (voiceChannelID === undefined) return;
+    const voiceChannel = msg.member.voiceChannel;
+    if (voiceChannel === undefined) return;
+
+    // if (yt_id === undefined) {
+    //     if (queues[id] !== undefined) {
+    //         if (queues[id].length > 0) {
+    //             yt_id = queues[id].shift();
+    //             console.log(yt_id);
+    //         } else {
+    //             delete queues[id];
+    //         }
+    //     }
+    // }
+    if (yt_id === undefined) return;
+    const url = yt_prefix + yt_id;
+
+    ytdl.getInfo(url, {}, function (error, info) {
+        if (error) {
+            if (error.message.includes("404")) {
+                console.log("video doesn't exist?");
+            } else if (error.message.includes("303")) {
+                console.log("video id too long?");
+            } else {
+                console.log(error, error.message, error.name);
+                throw error;
+            }
+        } else {
+            msg.channel.sendMessage("Loading: `" + info.title + "`");
+            const server = servers[id];
+            const stream = ytdl(url, { filter: 'audioonly' });
+            voiceChannel.join()
+                .then((connection) => {
+                    const dispatcher = connection.playStream(stream, { seek: 0, volume: server.volume / 100 });
+                    dispatcher.on('end', () => {
+                        connection.disconnect();
+                        // if (queues[id] !== undefined) {
+                        //     if (queues[id].length > 0) {
+                        //         play(msg, queues[id].shift());
+                        //     } else {
+                        //         delete queues[id];
+                        //     }
+                        // }
+                    });
+                    msg.channel.sendMessage("Playing: `" + info.title + "`");
+                })
+                .catch(console.log);
+        }
     });
 }
+
+function stop(msg) {
+    const id = msg.channel.guild.id;
+    const voiceConnection = client.voiceConnections.get(id);
+    if (voiceConnection === undefined) return;
+    voiceConnection.disconnect();
+}
+
+function volume(msg, value) {
+    const id = msg.channel.guild.id;
+    const server = servers[id];
+    if (!isNaN(value)) {
+        value = clamp(value, 0, 100);
+        server.volume = value;
+        // save
+        fs.writeFileSync(__dirname + '/servers.json', JSON.stringify(servers, null, 4));
+        msg.reply(`Volume has been set at: \`${value}\`%`);
+
+        const voiceConnection = client.voiceConnections.get(id);
+        if (voiceConnection === undefined) return;
+        const dispatcher = voiceConnection.player.dispatcher;
+        if (dispatcher) {
+            dispatcher.setVolume(value / 100);
+        }
+    } else {
+        msg.reply(`Volume is set at: \`${server.volume}\`%`);
+    }
+}
+
+function queue(msg, yt_id) {
+    // const id = msg.channel.guild.id;
+    // const url = yt_prefix + yt_id;
+    // ytdl.getInfo(url, {}, function (error, info) {
+    //     if (error) {
+    //         if (error.message.includes("404")) {
+    //             console.log("video doesn't exist?");
+    //         } else if (error.message.includes("303")) {
+    //             console.log("video id too long?");
+    //         } else {
+    //             console.log(error, error.message, error.name);
+    //             throw error;
+    //         }
+    //     } else {
+    //         if (queues[id] === undefined) queues[id] = [];
+    //         queues[id].push(yt_id);
+    //         msg.channel.sendMessage(`Queued: \`${info.title}\``);
+    //     }
+    // });
+}
+
+function clear(msg) {
+    console.log("clear");
+}
+
+function me(msg) {
+    msg.reply(msg.author.id);
+}
+
+function mods(msg) {
+    const id = msg.channel.guild.id;
+    const server = servers[id];
+    let s = "List of mods: \n";
+    for (let key in server.mods) {
+        const username = client.users.get(key).username;
+        s += `id: \`${key}\` name: \`${username}\`\n`;
+    }
+    msg.channel.sendMessage(s);
+}
+
+function mod(msg, userID) {
+    const id = msg.channel.guild.id;
+    const server = servers[id];
+    if (server.mods[userID] === undefined) {
+        const user = client.users.get(userID);
+        if (user) {
+            server.mods[userID] = {};
+            // save
+            fs.writeFileSync(__dirname + '/servers.json', JSON.stringify(servers, null, 4));
+            msg.channel.sendMessage(`\`${user.username}\` is now a mod`);
+        } else {
+            msg.reply(`UserID doesn't exist`);
+        }
+    } else {
+        msg.reply(`User is already a mod`);
+    }
+}
+
+function unmod(msg, userID) {
+    const id = msg.channel.guild.id;
+    const server = servers[id];
+    if (server.mods[userID] !== undefined) {
+        const user = client.users.get(userID);
+        if (user) {
+            delete server.mods[userID];
+            // save
+            fs.writeFileSync(__dirname + '/servers.json', JSON.stringify(servers, null, 4));
+            msg.channel.sendMessage(`\`${user.username}\` is no longer a mod`);
+        } else {
+            msg.reply(`UserID doesn't exist`);
+        }
+    }
+}
+
+// CTRL+C
+if (process.platform === "win32") {
+    var rl = require("readline").createInterface({
+        input: process.stdin,
+        output: process.stdout
+    });
+
+    rl.on("SIGINT", function () {
+        process.emit("SIGINT");
+    });
+}
+
+process.on("SIGINT", function () {
+    //graceful shutdown
+    process.exit();
+});
