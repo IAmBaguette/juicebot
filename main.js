@@ -156,8 +156,6 @@ function play(msg, yt_id) {
     const voiceChannel = msg.member.voiceChannel;
     if (voiceChannel === undefined) return;
 
-    console.log(queues);
-
     if (yt_id === undefined) {
         if (queues[id] !== undefined) {
             yt_id = queues[id].shift();
@@ -185,8 +183,8 @@ function play(msg, yt_id) {
             if (voiceConnection) {
                 // do not play another song if we are already playing one
                 if (voiceConnection.player.speaking) {
-                        if (yt_id !== undefined) queue(msg, yt_id);
-                        return; 
+                    if (yt_id !== undefined) queue(msg, yt_id);
+                    return;
                 }
 
                 const dispatcher = voiceConnection.playStream(stream, { seek: 0, volume: server.volume / 100 });
@@ -198,6 +196,7 @@ function play(msg, yt_id) {
                 voiceChannel.join()
                     .then((connection) => {
                         connection.playStream(stream, { seek: 0, volume: server.volume / 100 });
+                        console.log(stream);
                         const dispatcher = connection.playStream(stream, { seek: 0, volume: server.volume / 100 });
                         dispatcher.on('end', () => {
                             play(msg);
