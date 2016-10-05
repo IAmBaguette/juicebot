@@ -126,7 +126,7 @@ function info(msg) {
     msg.reply(
         "\n```" +
         "App: JuiceBot\n" +
-        "Version: 0.12.0\n" +
+        "Version: 0.1.0\n" +
         "Author: IAmBaguette```\n");
 }
 
