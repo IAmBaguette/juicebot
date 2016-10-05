@@ -7,9 +7,17 @@
         "description": "Provides information about Juicebot.\n\nINFO",
         "accesslevel": 0
     },
+    "join": {
+        "description": "add a description",
+        "accesslevel": 1
+    },
+    "leave": {
+        "description": "add a description",
+        "accesslevel": 1
+    },
     "play": {
         "description": "add a description",
-        "accesslevel": 0
+        "accesslevel": 1
     },
     "stop": {
         "description": "add a description",

@@ -11,6 +11,8 @@ const servers = require(__dirname + '/servers.json');
 const handlers = {
     'help': help,
     'info': info,
+    'join': join,
+    'leave': leave,
     'play': play,
     'stop': stop,
     'volume': volume,
@@ -128,6 +130,25 @@ function info(msg) {
         "Author: IAmBaguette```\n");
 }
 
+function join(msg) {
+    const voiceChannelID = msg.member.voiceChannelID;
+    if (voiceChannelID === undefined) return;
+    const voiceChannel = msg.member.voiceChannel;
+    if (voiceChannel === undefined) return;
+    voiceChannel.join()
+        .then((connection) => {
+            msg.channel.sendMessage("Joined: `" + connection.channel.name + "`");
+        });
+}
+
+function leave(msg) {
+    const id = msg.channel.guild.id;
+    const voiceConnection = client.voiceConnections.get(id);
+    if (voiceConnection === undefined) return;
+    voiceConnection.disconnect();
+    msg.channel.sendMessage("Left: `" + voiceConnection.channel.name + "`")
+}
+
 function play(msg, yt_id) {
     const id = msg.channel.guild.id;
     const voiceChannelID = msg.member.voiceChannelID;
@@ -135,17 +156,16 @@ function play(msg, yt_id) {
     const voiceChannel = msg.member.voiceChannel;
     if (voiceChannel === undefined) return;
 
-    // if (yt_id === undefined) {
-    //     if (queues[id] !== undefined) {
-    //         if (queues[id].length > 0) {
-    //             yt_id = queues[id].shift();
-    //             console.log(yt_id);
-    //         } else {
-    //             delete queues[id];
-    //         }
-    //     }
-    // }
-    if (yt_id === undefined) return;
+    console.log(queues);
+
+    if (yt_id === undefined) {
+        if (queues[id] !== undefined) {
+            yt_id = queues[id].shift();
+            if (yt_id === undefined) return;
+        } else {
+            return;
+        }
+    }
     const url = yt_prefix + yt_id;
 
     ytdl.getInfo(url, {}, function (error, info) {
@@ -159,25 +179,33 @@ function play(msg, yt_id) {
                 throw error;
             }
         } else {
-            msg.channel.sendMessage("Loading: `" + info.title + "`");
             const server = servers[id];
             const stream = ytdl(url, { filter: 'audioonly' });
-            voiceChannel.join()
-                .then((connection) => {
-                    const dispatcher = connection.playStream(stream, { seek: 0, volume: server.volume / 100 });
-                    dispatcher.on('end', () => {
-                        connection.disconnect();
-                        // if (queues[id] !== undefined) {
-                        //     if (queues[id].length > 0) {
-                        //         play(msg, queues[id].shift());
-                        //     } else {
-                        //         delete queues[id];
-                        //     }
-                        // }
-                    });
-                    msg.channel.sendMessage("Playing: `" + info.title + "`");
-                })
-                .catch(console.log);
+            const voiceConnection = client.voiceConnections.get(id);
+            if (voiceConnection) {
+                // do not play another song if we are already playing one
+                if (voiceConnection.player.speaking) {
+                        if (yt_id !== undefined) queue(msg, yt_id);
+                        return; 
+                }
+
+                const dispatcher = voiceConnection.playStream(stream, { seek: 0, volume: server.volume / 100 });
+                dispatcher.on('end', () => {
+                    play(msg);
+                });
+                msg.channel.sendMessage("Playing: `" + info.title + "`");
+            } else {
+                voiceChannel.join()
+                    .then((connection) => {
+                        connection.playStream(stream, { seek: 0, volume: server.volume / 100 });
+                        const dispatcher = connection.playStream(stream, { seek: 0, volume: server.volume / 100 });
+                        dispatcher.on('end', () => {
+                            play(msg);
+                        });
+                        msg.channel.sendMessage("Playing: `" + info.title + "`");
+                    })
+                    .catch(console.log);
+            }
         }
     });
 }
@@ -186,7 +214,10 @@ function stop(msg) {
     const id = msg.channel.guild.id;
     const voiceConnection = client.voiceConnections.get(id);
     if (voiceConnection === undefined) return;
-    voiceConnection.disconnect();
+    const dispatcher = voiceConnection.player.dispatcher;
+    if (dispatcher) {
+        dispatcher.end();
+    }
 }
 
 function volume(msg, value) {
@@ -195,7 +226,7 @@ function volume(msg, value) {
     if (!isNaN(value)) {
         value = clamp(value, 0, 100);
         server.volume = value;
-        // save
+        // save configuration
         fs.writeFileSync(__dirname + '/servers.json', JSON.stringify(servers, null, 4));
         msg.reply(`Volume has been set at: \`${value}\`%`);
 
@@ -211,24 +242,24 @@ function volume(msg, value) {
 }
 
 function queue(msg, yt_id) {
-    // const id = msg.channel.guild.id;
-    // const url = yt_prefix + yt_id;
-    // ytdl.getInfo(url, {}, function (error, info) {
-    //     if (error) {
-    //         if (error.message.includes("404")) {
-    //             console.log("video doesn't exist?");
-    //         } else if (error.message.includes("303")) {
-    //             console.log("video id too long?");
-    //         } else {
-    //             console.log(error, error.message, error.name);
-    //             throw error;
-    //         }
-    //     } else {
-    //         if (queues[id] === undefined) queues[id] = [];
-    //         queues[id].push(yt_id);
-    //         msg.channel.sendMessage(`Queued: \`${info.title}\``);
-    //     }
-    // });
+    const id = msg.channel.guild.id;
+    const url = yt_prefix + yt_id;
+    ytdl.getInfo(url, {}, function (error, info) {
+        if (error) {
+            if (error.message.includes("404")) {
+                console.log("video doesn't exist?");
+            } else if (error.message.includes("303")) {
+                console.log("video id too long?");
+            } else {
+                console.log(error, error.message, error.name);
+                throw error;
+            }
+        } else {
+            if (queues[id] === undefined) queues[id] = [];
+            queues[id].push(yt_id);
+            msg.channel.sendMessage(`Queued: \`${info.title}\``);
+        }
+    });
 }
 
 function clear(msg) {
