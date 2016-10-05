@@ -263,7 +263,7 @@ function queue(msg, yt_id) {
 }
 
 function clear(msg) {
-    console.log("clear");
+    if (queues[id] !== undefined) queues[id] = [];
 }
 
 function me(msg) {
